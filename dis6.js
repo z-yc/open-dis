@@ -249,83 +249,100 @@ if (typeof dis === "undefined")
 if (typeof exports === "undefined")
    exports = {};
 
+/**
+ * @param {Buffer} binaryData
+ */
 dis.InputStream = function(binaryData)
 {
-    this.dataView = new DataView(binaryData, 0); // data, byte offset
+    /**
+     * @type {Buffer}
+     */
+    this.binaryData=binaryData;
     this.currentPosition = 0;                    // ptr to "current" position in array
     
     dis.InputStream.prototype.readUByte = function()
     {
-        var data = this.dataView.getUint8(this.currentPosition);
+        var data = this.binaryData.readUInt8(this.currentPosition);
         this.currentPosition = this.currentPosition + 1;
         return data;
     };
     
     dis.InputStream.prototype.readByte = function()
     {
-        var data = this.dataView.getInt8(this.currentPosition);
+        var data = this.binaryData.readInt8(this.currentPosition);
         this.currentPosition = this.currentPosition + 1;
         return data;
     };
     
     dis.InputStream.prototype.readUShort = function()
     {
-        var data = this.dataView.getUint16(this.currentPosition);
+        var data = this.binaryData.readUInt16BE(this.currentPosition);
         this.currentPosition = this.currentPosition + 2;
         return data;
     };
     
     dis.InputStream.prototype.readShort = function()
     {
-        var data = this.dataView.getInt16(this.currentPosition);
+        var data = this.binaryData.readInt16BE(this.currentPosition);
         this.currentPosition = this.currentPosition + 2;
         return data;
     };
     
     dis.InputStream.prototype.readUInt = function()
     {
-        var data = this.dataView.getUint32(this.currentPosition);
+        var data = this.binaryData.readUInt32BE(this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
         return data;
     };
     
     dis.InputStream.prototype.readInt = function()
     {
-        var data = this.dataView.getInt32(this.currentPosition);
+        var data = this.binaryData.readInt32BE(this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
         return data;
     };
     
-    /** Read a long integer. Assumes big endian format. Uses the BigInteger package. */
+    /**
+     * Read a long integer. Assumes big endian format.
+     * @return {Array<number>}
+     */
     dis.InputStream.prototype.readLongInt = function()
     {
-        var data1 = this.dataView.getInt32(this.currentPosition);
-        var data2 = this.dataView.getInt32(this.currentPosition + 4);
-        
+        var longInt=new Array(8);
+        longInt[0]=this.binaryData.readInt8(this.currentPosition);
+        for(var i=1; i<8; i++){
+            longInt[i]=this.binaryData.readUInt8(this.currentPosition+i);
+        }
         this.currentPosition = this.currentPosition + 8;
-        
+        return longInt;
     };
    
     dis.InputStream.prototype.readFloat32 = function()
     {
-        var data = this.dataView.getFloat32(this.currentPosition);
+        var data = this.binaryData.readFloatBE(this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
         return data;
     };
     
     dis.InputStream.prototype.readFloat64 = function()
     {
-        var data = this.dataView.getFloat64(this.currentPosition);
+        var data = this.binaryData.readDoubleBE(this.currentPosition);
         this.currentPosition = this.currentPosition + 8;
         return data;
     };
     
+    /**
+     * Read a unsigned long integer
+     * @return {Array<number>}
+     */
     dis.InputStream.prototype.readLong = function()
     {
-        console.log("Problem in dis.InputStream. Javascript cannot natively handle 64 bit ints");
-        console.log("Returning 0 from read, which is almost certainly wrong");
+        var longInt=new Array(8);
+        for(var i=0; i<8; i++){
+            longInt[i]=this.binaryData.readUInt8(this.currentPosition+i);
+        }
         this.currentPosition = this.currentPosition + 8;
-        return 0;
+        return longInt;
     };
 };
 
@@ -338,84 +355,94 @@ if (typeof exports === "undefined")
    exports = {};
 
 /**
- * @param binaryDataBuffer ArrayBuffer
+ * @param {Buffer} binaryDataBuffer
 */
 dis.OutputStream = function(binaryDataBuffer)
 {
     this.binaryData = binaryDataBuffer;
-    this.dataView = new DataView(this.binaryData); // data, byte offset
     this.currentPosition = 0;                    // ptr to current position in array
-    
-    /**
-     * Returns a byte array trimmed to the maximum number of bytes written
-     * to the stream. Eg, if we initialize with a 500 byte bufer, and we
-     * only write 10 bytes to the output stream, this will return the first
-     * ten bytes of the array.
-     * 
-     * @returns {ArrayBuffer} Only the data written
-     */
-    dis.OutputStream.prototype.toByteArray = function()
-    {
-        var trimmedData = this.binaryData.slice(0, this.currentPosition); 
-        return trimmedData;
-    };
-    
     
     dis.OutputStream.prototype.writeUByte = function(userData)
     {   
-        this.dataView.setUint8(this.currentPosition, userData);
+        this.binaryData.writeUInt8(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 1;
     };
     
     dis.OutputStream.prototype.writeByte = function(userData)
     {
-        this.dataView.setInt8(this.currentPosition, userData);
+        this.binaryData.writeInt8(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 1;
     };
     
     dis.OutputStream.prototype.writeUShort = function(userData)
     {
-        this.dataView.setUint16(this.currentPosition, userData);
+        this.binaryData.writeUInt16BE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 2;
     };
     
     dis.OutputStream.prototype.writeShort = function(userData)
     {
-        this.dataView.setInt16(this.currentPosition, userData);
+        this.binaryData.writeInt16BE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 2;
     };
     
     dis.OutputStream.prototype.writeUInt = function(userData)
     {
-        this.dataView.setUint32(this.currentPosition, userData);
+        this.binaryData.writeUInt32BE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
     };
     
     dis.OutputStream.prototype.writeInt = function(userData)
     {
-        this.dataView.setInt32(this.currentPosition, userData);
+        this.binaryData.writeInt32BE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
     };
    
     dis.OutputStream.prototype.writeFloat32 = function(userData)
     {
-        this.dataView.setFloat32(this.currentPosition, userData);
+        this.binaryData.writeFloatBE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 4;
     };
     
     dis.OutputStream.prototype.writeFloat64 = function(userData)
     {
-        this.dataView.setFloat64(this.currentPosition, userData);
+        this.binaryData.writeDoubleBE(userData, this.currentPosition);
         this.currentPosition = this.currentPosition + 8;
     };
     
+    /**
+     * write a long integer
+     * @param {Array<number>} userData
+     */
+    dis.OutputStream.prototype.writeLongInt = function(userData)
+    {
+        this.binaryData.writeInt8(userData[i], this.currentPosition+i);
+        for(var i=1; i<8; i++){
+            this.binaryData.writeUInt8(userData[i], this.currentPosition+i);
+        }
+        this.currentPosition = this.currentPosition + 8;
+    };
+
+    /**
+     * write a unsigned 64 bits integer
+     * @param {Array<number>} userData
+     */
     dis.OutputStream.prototype.writeLong = function(userData)
     {
-        console.log("Problem in dis.outputStream. Javascript cannot natively handle 64 bit ints");
-        console.log("writing 0, which is almost certainly wrong");
-        this.dataView.setInt32(this.currentPosition, 0);
-        this.dataView.setInt32(this.currentPosition + 4, 0);
+        for(var i=0; i<8; i++){
+            this.binaryData.writeUInt8(userData[i], this.currentPosition+i);
+        }
         this.currentPosition = this.currentPosition + 8;
+    };
+
+    /**
+     * write pdu.length
+     * @return {number} pdu.length
+     */
+    dis.OutputStream.prototype.end = function()
+    {
+        this.binaryData.writeUInt16BE(this.currentPosition, 8);
+        return this.currentPosition;
     };
 };
 
@@ -451,13 +478,12 @@ if (typeof exports === "undefined")
   * decode incoming binary data and
   * return the correct type of PDU.
   * 
-  * @param {type} data the IEEE 1278.1 binary data
-  * @returns {Pdu} Returns an instance of some PDU, be it espdu, fire, detonation, etc. Exception if PduType not known.
+  * @param {Buffer} data the IEEE 1278.1 binary data
+  * @returns {Pdu} Returns an instance of some PDU, be it espdu, fire, detonation, etc.
   */
  dis.PduFactory.prototype.createPdu = function(data)
  {
-     var asUint8Array = new Uint8Array(data);
-     var pduType = asUint8Array[2];
+     var pduType = data[2];
      var inputStream = new dis.InputStream(data);
      var newPdu = null;
      
@@ -501,7 +527,7 @@ if (typeof exports === "undefined")
                 break;
 
             default:
-               throw  "PduType: " + pduType + " Unrecognized PDUType. Add PDU in dis.PduFactory.";
+               break;
         }
     //}
     // This also picks up any errors decoding what we though was a "normal" PDU
@@ -887,9 +913,6 @@ dis.StringConversion.prototype.StringToDisMarking = function(markingString)
     if(markingLength > 11)
         markingLength = 11;
     
-    // If the string is shorter than 11 bytes, we zero-fill the array
-    var  diff = 11 - markingLength;
-    
     for(var idx = 0; idx < markingLength; idx++)
     {
         byteMarking.push(markingString.charCodeAt(idx));
@@ -911,14 +934,13 @@ dis.StringConversion.prototype.StringToDisMarking = function(markingString)
  */
 dis.StringConversion.prototype.DisMarkingToString = function(disMarking)
 {
-    var marking = "";
-    
-    for(var idx = 1; idx < disMarking.length; idx++)
-    {
-        marking = marking + String.fromCharCode(disMarking[idx]);
+    var marking=disMarking.slice(1);
+
+    for(var idx = 0; idx < marking.length; idx++){
+        marking[idx] = String.fromCharCode(marking[idx]);
     }
-    
-    return marking;
+
+    return marking.join('');
 };
 
 // This is a temporary placeholder until full require.js code
@@ -5241,6 +5263,7 @@ dis.EntityStatePdu = function()
        {
            articulationParameters[idx].encodeToBinary(outputStream);
        }
+       this.pduLength = outputStream.end();
 
   };
 
@@ -6984,6 +7007,7 @@ dis.FirePdu = function()
        this.burstDescriptor.encodeToBinary(outputStream);
        this.velocity.encodeToBinary(outputStream);
        outputStream.writeFloat32(this.rangeToTarget);
+       this.pduLength = outputStream.end();
   };
 }; // end of class
 
@@ -13725,11 +13749,11 @@ dis.VariableDatum = function()
   {
        this.variableDatumID = inputStream.readUInt();
        this.variableDatumLength = inputStream.readUInt();
-       for(var idx = 0; idx < this.variableDatumLength; idx++)
+       //only read meaningful bytes
+       var len=Math.ceil(this.variableDatumLength/8);
+       for(var idx = 0; idx < len; idx++)
        {
-           var anX = new dis.OneByteChunk();
-           anX.initFromBinary(inputStream);
-           this.variableData.push(anX);
+           this.variableData.push(inputStream.readByte());
        }
 
   };
@@ -13738,9 +13762,13 @@ dis.VariableDatum = function()
   {
        outputStream.writeUInt(this.variableDatumID);
        outputStream.writeUInt(this.variableDatumLength);
-       for(var idx = 0; idx < this.variableData.length; idx++)
+       var len=Math.ceil(this.variableDatumLength/64.0)*8;
+       for(var idx = 0; idx < len; idx++)
        {
-           variableData[idx].encodeToBinary(outputStream);
+           outputStream.writeByte(this.variableData[idx]);
+       }
+       for(var i=this.variableData.length; i<len; i++){
+           outputStream.writeByte(0);
        }
 
   };
