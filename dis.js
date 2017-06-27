@@ -451,7 +451,7 @@ dis.OutputStream = function(binaryDataBuffer)
      */
     dis.OutputStream.prototype.writeBuffer = function(buf, bufStart, length)
     {
-        buf.copy(this.binaryData, this.currentPosition, bufStart, length);
+        buf.copy(this.binaryData, this.currentPosition, bufStart, bufStart+length);
         this.currentPosition = this.currentPosition + length;
     };
 
