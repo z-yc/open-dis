@@ -333,16 +333,27 @@ dis.InputStream = function(binaryData)
     
     /**
      * Read a unsigned long integer
-     * @return {Array<number>}
+     * @return {Array<number>} [high32, low32]
      */
     dis.InputStream.prototype.readLong = function()
     {
-        var longInt=new Array(8);
-        for(var i=0; i<8; i++){
-            longInt[i]=this.binaryData.readUInt8(this.currentPosition+i);
-        }
+        var longInt=new Array(2);
+        longInt[0]=this.binaryData.readInt32BE(this.currentPosition);
+        longInt[1]=this.binaryData.readInt32BE(this.currentPosition+4);
         this.currentPosition = this.currentPosition + 8;
         return longInt;
+    };
+
+    /**
+     * Read buffer
+     * @param {Buffer} to
+     * @param {number} start target start
+     * @param {number} length
+     */
+    dis.InputStream.prototype.readBuffer = function(to, start, length)
+    {
+        this.binaryData.copy(to, start, this.currentPosition, this.currentPosition+length);
+        this.currentPosition = this.currentPosition + length;
     };
 };
 
@@ -412,27 +423,36 @@ dis.OutputStream = function(binaryDataBuffer)
     
     /**
      * write a long integer
-     * @param {Array<number>} userData
+     * @param {Array<number>} userData [high32, low32]
      */
     dis.OutputStream.prototype.writeLongInt = function(userData)
     {
-        this.binaryData.writeInt8(userData[i], this.currentPosition+i);
-        for(var i=1; i<8; i++){
-            this.binaryData.writeUInt8(userData[i], this.currentPosition+i);
-        }
+        this.binaryData.writeInt32BE(userData[0]);
+        this.binaryData.writeUInt32BE(userData[1]);
         this.currentPosition = this.currentPosition + 8;
     };
 
     /**
      * write a unsigned 64 bits integer
-     * @param {Array<number>} userData
+     * @param {Array<number>} userData  [high32, low32]
      */
     dis.OutputStream.prototype.writeLong = function(userData)
     {
-        for(var i=0; i<8; i++){
-            this.binaryData.writeUInt8(userData[i], this.currentPosition+i);
-        }
+        this.binaryData.writeUInt32BE(userData[0]);
+        this.binaryData.writeUInt32BE(userData[1]);
         this.currentPosition = this.currentPosition + 8;
+    };
+
+    /**
+     * write buffer
+     * @param {Buffer} buf source buffer
+     * @param {number} bufStart source start
+     * @param {number} length
+     */
+    dis.OutputStream.prototype.writeBuffer = function(buf, bufStart, length)
+    {
+        buf.copy(this.binaryData, this.currentPosition, bufStart, length);
+        this.currentPosition = this.currentPosition + length;
     };
 
     /**
@@ -867,90 +887,7 @@ dis.RangeCoordinates = function(lat, lon, alt)
        return {x:X, y:Y, z:Z};
    };
    
-exports.RangeCoordinates = dis.RangeCoordinates;if (typeof dis === "undefined")
-   dis = {};
-   
-// Support for node.js style modules; ignore if not using node.js require
-if (typeof exports === "undefined")
-   exports = {};
-
-/**
- * Utility class that converts between strings and the DIS ESPDU marking
- * field. The marking field is 12 bytes long, with the first byte being
- * the character set used, and the remaining 11 bytes character codes in
- * that character set. This is often used for debugging or "billboard"
- * displays in 3D; it's intended for humans. The string character values
- * are clamped (or filled) to exactly 11 bytes, so "This is a long string"
- * will be clamped to "This is a l" (in charachter codes) and "foo" will
- * be filled to "foo\0\0\0\0\0\0\0\0".<p>
- * 
- * It is recommended that only ASCII character set (character set = 1)
- * be used.
- * 
- * @returns {undefined}
- */
-dis.StringConversion = function()
-{
-};
-
-/**
- * Given a string, returns a DIS marking field. The character set is set to
- * 1, for ascii. The length is clamped to 11, and zero-filled if the string
- * is shorter than 11.
- * 
- * @returns {array} disMarking field, 12 bytes long, character set = 1 (ascii) in 0, zero-filled to 11 character codes 
- */
-dis.StringConversion.prototype.StringToDisMarking = function(markingString)
-{
-    var byteMarking = [];
-    
-    // character set 1 = ascii
-    byteMarking.push(1);
-    
-    var markingLength = markingString.length;
-    
-    // Clamp it to 11 bytes of character data
-    if(markingLength > 11)
-        markingLength = 11;
-    
-    for(var idx = 0; idx < markingLength; idx++)
-    {
-        byteMarking.push(markingString.charCodeAt(idx));
-    }
-    
-    for(var idx = markingLength; idx < 11; idx++)
-    {
-        byteMarking.push(0);
-    }
-
-    return byteMarking;
-};
-
-/**
- * Given a DIS marking field, returns a string. Assumes always ascii.
- * 
- * @param {array} disMarking dis marking field, [0] = character set, the rest character codes
- * @returns {string} string equivalent of the marking field
- */
-dis.StringConversion.prototype.DisMarkingToString = function(disMarking)
-{
-    var marking=disMarking.slice(1);
-
-    for(var idx = 0; idx < marking.length; idx++){
-        marking[idx] = String.fromCharCode(marking[idx]);
-    }
-
-    return marking.join('');
-};
-
-// This is a temporary placeholder until full require.js code
-// support is present.
-if (typeof exports === "undefined")
-   exports = {};
-
 exports.RangeCoordinates = dis.RangeCoordinates;
-exports.InputStream = dis.InputStream;
-exports.OutputStream = dis.OutputStream;
 
 /**
  * Section 5.3.6.5. Acknowledge the receiptof a start/resume, stop/freeze, or RemoveEntityPDU. COMPLETE
@@ -3830,16 +3767,12 @@ dis.DataQueryPdu = function()
        this.numberOfVariableDatumRecords = inputStream.readUInt();
        for(var idx = 0; idx < this.numberOfFixedDatumRecords; idx++)
        {
-           var anX = new dis.UnsignedIntegerWrapper();
-           anX.initFromBinary(inputStream);
-           this.fixedDatums.push(anX);
+           this.fixedDatums.push(inputStream.readUInt());
        }
 
        for(var idx = 0; idx < this.numberOfVariableDatumRecords; idx++)
        {
-           var anX = new dis.UnsignedIntegerWrapper();
-           anX.initFromBinary(inputStream);
-           this.variableDatums.push(anX);
+           this.variableDatums.push(inputStream.readUInt());
        }
 
   };
@@ -3861,12 +3794,12 @@ dis.DataQueryPdu = function()
        outputStream.writeUInt(this.numberOfVariableDatumRecords);
        for(var idx = 0; idx < this.fixedDatums.length; idx++)
        {
-           fixedDatums[idx].encodeToBinary(outputStream);
+           outputStream.writeUInt(this.fixedDatums[idx]);
        }
 
        for(var idx = 0; idx < this.variableDatums.length; idx++)
        {
-           variableDatums[idx].encodeToBinary(outputStream);
+           outputStream.writeUInt(this.variableDatums[idx]);
        }
 
   };
@@ -8875,39 +8808,27 @@ dis.Marking = function()
    this.characterSet = 0;
 
    /** The characters */
-   this.characters = new Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+   this.characters = Buffer.alloc(11);
 
   dis.Marking.prototype.initFromBinary = function(inputStream)
   {
        this.characterSet = inputStream.readUByte();
-       for(var idx = 0; idx < 11; idx++)
-       {
-          this.characters[ idx ] = inputStream.readByte();
-       }
+       inputStream.readBuffer(this.characters, 0, 11);
   };
 
   dis.Marking.prototype.encodeToBinary = function(outputStream)
   {
        outputStream.writeUByte(this.characterSet);
-       for(var idx = 0; idx < 11; idx++)
-       {
-          outputStream.writeByte(this.characters[ idx ] );
-       }
+       outputStream.writeBuffer(this.characters, 0, 11);
   };
   
-  /*
+  /**
    * Returns the byte array marking, in string format. 
-   * @return string format marking characters
+   * @return {string} string format marking characters
    */
   dis.Marking.prototype.getMarking = function()
   {
-      var marking = "";
-      for(var idx = 0; idx < 11; idx++)
-      {
-          marking = marking + String.fromCharCode(this.characters[idx]);
-      }
-      
-      return marking;
+      return this.characters.toString();
   };
   
   /**
@@ -8915,30 +8836,12 @@ dis.Marking = function()
    * to the appropriate character values. Clamps the string to no more
    * than 11 characters.
    * 
-   * @param {String} newMarking string format marking
-   * @returns {nothing}
+   * @param {string} newMarking string format marking
    */
   dis.Marking.prototype.setMarking = function(newMarking)
   {
-      var stringLen = newMarking.length;
-      if(stringLen > 11)
-          stringLen = 11;
-      
-      // Copy over up to 11 characters from the string to the array
-      var charsCopied = 0;
-      while(charsCopied < stringLen)
-      {          
-          this.characters[charsCopied] = newMarking.charCodeAt( charsCopied );
-          charsCopied++;
-      }
-      
-      // Zero-fill the remainer of the character array
-      while(charsCopied < 11)
-      {
-          this.characters[ charsCopied ] = 0;
-          charsCopied++;
-      }
-      
+      this.characters.fill(0);
+      this.characters.write(newMarking);
   };
 }; // end of class
 
@@ -13674,46 +13577,6 @@ dis.UaPdu = function()
 exports.UaPdu = dis.UaPdu;
 
 // End of UaPdu class
-
-/**
- * Wrapper for an unsigned 32 bit integer
- *
- * Copyright (c) 2008-2015, MOVES Institute, Naval Postgraduate School. All rights reserved.
- * This work is licensed under the BSD open source license, available at https://www.movesinstitute.org/licenses/bsd.html
- *
- * @author DMcG
- */
-// On the client side, support for a  namespace.
-if (typeof dis === "undefined")
- dis = {};
-
-
-// Support for node.js style modules. Ignored if used in a client context.
-// See http://howtonode.org/creating-custom-modules
-if (typeof exports === "undefined")
- exports = {};
-
-
-dis.UnsignedIntegerWrapper = function()
-{
-   /** name can't be too accurate or the generated source code will have reserved word problems */
-   this.wrapper = 0;
-
-  dis.UnsignedIntegerWrapper.prototype.initFromBinary = function(inputStream)
-  {
-       this.wrapper = inputStream.readUInt();
-  };
-
-  dis.UnsignedIntegerWrapper.prototype.encodeToBinary = function(outputStream)
-  {
-       outputStream.writeUInt(this.wrapper);
-  };
-}; // end of class
-
- // node.js module support
-exports.UnsignedIntegerWrapper = dis.UnsignedIntegerWrapper;
-
-// End of UnsignedIntegerWrapper class
 
 /**
  * Section 5.2.32. Variable Datum Record
